@@ -8,7 +8,7 @@ from random import shuffle
 
 from settings import readsettings, writesettings
 
-from mpvplayer import mpvplayergetvolume, mpvplayer
+from mpvplayer import mpvplayergetvolume, mpvplayer, mpvplayerstop, mpvplayercycle
 
 from rpitts import say
 
@@ -20,19 +20,32 @@ logged_in = gmapi.login(googleuserid, googlepasswd, Mobileclient.FROM_MAC_ADDRES
 
 #'text': 'play a song Give life back to music on Google Music'
 def getgmusicquerystring(querystring,querytype):
-    gmregexobj = re.match( r"{'text': 'play(.*)"+ querytype +"(.*) (on|from) .*'}", querystring, re.I|re.I)
+    gmregexobj = re.match( r"{'text': '((shuffle|loop)\s*(and)?\s*(shuffle|loop)?\s*)?play(.*)"+ querytype +"(.*) (on|from) .*'}", 
+                 querystring, re.I|re.I|re.I|re.I|re.I|re.I)
     if gmregexobj:
-       return gmregexobj.group(2)
+       return gmregexobj.group(6)
     else:
        return ""
 
+def updategmusiclibrary():
+    if os.path.isfile("gmusicsongslibrary.json"):
+       os.remove('gmusicsongslibrary.json')
+    songs_library = gmapi.get_all_songs()
+    with open('gmusicsongslibrary.json', 'w') as output_file:
+         json.dump(songs_library, output_file)
+    return songs_library
 
 def creategmusicplaylist(query,querydescription):
     if os.path.isfile("gmusicplaylist.json"):
        os.remove('gmusicplaylist.json')
+    songs_list=[]
     song_ids=[]
     querystring=str(query)
-    songs_list= gmapi.get_all_songs()
+    if os.path.isfile("gmusicsongslibrary.json"):
+       with open('gmusicsongslibrary.json','r') as input_file:
+            songs_list=json.load(input_file)
+    else:
+       songs_list=updategmusiclibrary()
     for i in range(0,len(songs_list)):
         if querystring.lower() in (songs_list[i][querydescription]).lower():
             song_ids.append(songs_list[i]['id'])
@@ -49,7 +62,6 @@ def playgmusicsongfromplaylist(index):
             songs_list=json.load(input_file)
             song_id=songs_list[index]
             streamurl=gmapi.get_stream_url(song_id)
-            print(streamurl)
             mpvplayer(mpvplayergetvolume(),streamurl)
     else:
        say('Your playlist is empty')
@@ -66,9 +78,12 @@ def playgmusicplaylist(**kwargs):
                   playlistlength=len(songs_list)
                   for tracknum in range(0,playlistlength):
                       streamurl=gmapi.get_stream_url(songs_list[tracknum])
-                      print(streamurl)
                       mpvplayer(mpvplayergetvolume(),streamurl)
+                      if not gmusicplayercontinueplayback():
+                         break
              if loop == False:
+                if os.path.isfile("gmusicplaylist.json"):
+                   os.remove("gmusicplaylist.json")
                 break
     else:
        say('Your playlist is empty')
@@ -89,10 +104,21 @@ def gmusicselect(phrase):
     else:
        say('Sorry you did not say the correct keywords')
 
+def stopgmusicplayer():
+    mpvplayerstop()
+    if os.path.isfile("gmusicplaylist.json"):
+       os.remove("gmusicplaylist.json")
+
+def gmusicplayercontinueplayback():
+    if os.path.isfile("gmusicplaylist.json"):
+       return True
+    else:
+       return False
+
+
 #creategmusicplaylist('daft punk','albumArtist')
 #playgmusicplaylist(shuffle=True)
 #gmusicselect("{'text': 'play a song Give life back to music on Google Music'}")
-#gmusicselect('{play artist daft punk from google music}')
+#gmusicselect("{'text': 'shuffle and play artist daft punk from google music'}")
 #gmusicselect('{play album songs by me from google music}')
 #gmusicselect('{play song give life back to music on google music}')
-
